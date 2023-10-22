@@ -2,6 +2,10 @@
 name = "keepass-to-env"
 version = "0.1.0"
 edition = "2021"
+authors = ["Syndim <im@syndim.org>"]
+repository = "https://github.com/Syndim/keepass-to-env"
+description = "A simple tool to convert Keepass database to dotenv file"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
