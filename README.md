@@ -15,5 +15,5 @@ cargo install keepass-to-env
 # usage
 
 ```
-keepass-to-env --kdbx <path/to/kdbx/file> --password <your/secret/password> [--output <path/to/dot/env>]
+kte --kdbx <path/to/kdbx/file> --password <your/secret/password> [--output <path/to/dot/env>]
 ```
