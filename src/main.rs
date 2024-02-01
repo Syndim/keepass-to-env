@@ -11,13 +11,17 @@ use log::{debug, info, LevelFilter};
 
 #[derive(Parser)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, help = "Path to the Keepass database")]
     kdbx: String,
 
-    #[arg(short, long)]
-    password: String,
+    #[arg(short, long, help = "Password of the Keepass database")]
+    password: Option<String>,
 
-    #[arg(short, long)]
+    #[arg(
+        short,
+        long,
+        help = "Path to the output .env file, if not provided, a child shell will start with the environment variables"
+    )]
     output: Option<String>,
 }
 
@@ -70,7 +74,14 @@ fn main() -> Result<()> {
     }
 
     let mut db_file = File::open(args.kdbx)?;
-    let key = DatabaseKey::new().with_password(args.password.as_str());
+    let password = if let Some(pwd) = args.password {
+        pwd
+    } else {
+        let pwd = rpassword::prompt_password("Password:")?;
+        pwd
+    };
+
+    let key = DatabaseKey::new().with_password(password.as_str());
     info!("Opening database");
     let db = Database::open(&mut db_file, key)?;
     info!("Database opened");
