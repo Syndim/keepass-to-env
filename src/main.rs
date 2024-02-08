@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use clap::Parser;
-use keepass::db::{Database, Node, NodeRef};
+use keepass::db::{Database, Group, Node, NodeRef};
 use keepass::DatabaseKey;
 use log::{debug, info, LevelFilter};
 
@@ -13,6 +13,9 @@ use log::{debug, info, LevelFilter};
 struct Args {
     #[arg(short, long, help = "Path to the Keepass database")]
     kdbx: String,
+
+    #[arg(short, long, help = "Root path of the environment variables")]
+    root: Option<String>,
 
     #[arg(short, long, help = "Password of the Keepass database")]
     password: Option<String>,
@@ -63,6 +66,37 @@ fn save_env(target: EnvTarget) -> Result<()> {
     Ok(())
 }
 
+fn search_env<'a, T>(group: &Group, env_target: &mut EnvTarget, path: &mut T) -> Result<()>
+where
+    T: Iterator<Item = &'a String>,
+{
+    let next_group = path.next();
+    for node in group.children.iter() {
+        match node {
+            Node::Group(g) => {
+                if let Some(group) = next_group {
+                    if group == &g.name {
+                        search_env(g, env_target, path)?;
+                    }
+                } else {
+                    info!("Ignoring group {}", g.name);
+                }
+            }
+            Node::Entry(e) => {
+                debug!("Writing {:?}", e.get_title());
+                if let (Some(username), Some(password)) = (e.get_username(), e.get_password()) {
+                    debug!("writing {}={} to target", username, password);
+                    write_env(env_target, username, password)?;
+                } else {
+                    info!("Username or password for {:?} not exist", e.get_title());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
     let args = Args::parse();
@@ -97,22 +131,15 @@ fn main() -> Result<()> {
         EnvTarget::Env(HashMap::new())
     };
 
-    for node in root_group.children.iter() {
-        match node {
-            Node::Group(g) => {
-                info!("Ignoring group {}", g.name);
-            }
-            Node::Entry(e) => {
-                debug!("Writing {:?}", e.get_title());
-                if let (Some(username), Some(password)) = (e.get_username(), e.get_password()) {
-                    debug!("writing {}={} to target", username, password);
-                    write_env(&mut env_target, username, password)?;
-                } else {
-                    info!("Username or password for {:?} not exist", e.get_title());
-                }
-            }
-        }
-    }
+    let path = if let Some(root) = args.root {
+        root.split("/")
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+    } else {
+        vec![]
+    };
+
+    search_env(root_group, &mut env_target, &mut path.iter())?;
 
     info!("Finished");
     save_env(env_target)?;
