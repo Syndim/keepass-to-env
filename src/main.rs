@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use keepass::db::{Database, Group, Node, NodeRef};
 use keepass::DatabaseKey;
@@ -26,11 +26,19 @@ struct Args {
         help = "Path to the output .env file, if not provided, a child shell will start with the environment variables"
     )]
     output: Option<String>,
+
+    #[arg(short, long, help = "Shell to start")]
+    shell: Option<String>,
+}
+
+struct ShellTarget {
+    pub shell: String,
+    pub env: HashMap<String, String>,
 }
 
 enum EnvTarget {
     File(File),
-    Env(HashMap<String, String>),
+    Shell(ShellTarget),
 }
 
 fn write_env(target: &mut EnvTarget, key: &str, value: &str) -> Result<()> {
@@ -38,8 +46,8 @@ fn write_env(target: &mut EnvTarget, key: &str, value: &str) -> Result<()> {
         EnvTarget::File(ref mut file) => {
             write!(file, "{}={}\n", key, value)?;
         }
-        EnvTarget::Env(ref mut map) => {
-            map.insert(key.to_string(), value.to_string());
+        EnvTarget::Shell(ref mut s) => {
+            s.env.insert(key.to_string(), value.to_string());
         }
     }
 
@@ -52,9 +60,9 @@ fn save_env(target: EnvTarget) -> Result<()> {
             file.flush()?;
             drop(file);
         }
-        EnvTarget::Env(map) => {
-            let mut cmd = Command::new("fish");
-            for (key, value) in map.into_iter() {
+        EnvTarget::Shell(s) => {
+            let mut cmd = Command::new(s.shell);
+            for (key, value) in s.env.into_iter() {
                 cmd.env(key, value);
             }
 
@@ -98,8 +106,13 @@ where
 }
 
 fn main() -> Result<()> {
-    env_logger::builder().filter_level(LevelFilter::Info).init();
+    env_logger::builder().filter_level(LevelFilter::Warn).init();
     let args = Args::parse();
+
+    if args.output.is_none() && args.shell.is_none() {
+        const MSG: &str = "Either output file or shell should be specified";
+        return Err(anyhow!(MSG));
+    }
 
     if let Some(ref output) = args.output {
         info!("Converting items from {} to {}", args.kdbx, output);
@@ -128,7 +141,10 @@ fn main() -> Result<()> {
     let mut env_target = if let Some(output) = args.output {
         EnvTarget::File(File::create(output)?)
     } else {
-        EnvTarget::Env(HashMap::new())
+        EnvTarget::Shell(ShellTarget {
+            shell: args.shell.unwrap(),
+            env: HashMap::new(),
+        })
     };
 
     let path = if let Some(root) = args.root {
