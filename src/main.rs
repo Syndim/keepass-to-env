@@ -29,11 +29,15 @@ struct Args {
 
     #[arg(short, long, help = "Shell to start")]
     shell: Option<String>,
+
+    #[arg(last = true, help = "Arguments to shell")]
+    shell_args: Option<Vec<String>>,
 }
 
 struct ShellTarget {
     pub shell: String,
     pub env: HashMap<String, String>,
+    pub args: Option<Vec<String>>,
 }
 
 enum EnvTarget {
@@ -44,7 +48,7 @@ enum EnvTarget {
 fn write_env(target: &mut EnvTarget, key: &str, value: &str) -> Result<()> {
     match target {
         EnvTarget::File(ref mut file) => {
-            write!(file, "{}={}\n", key, value)?;
+            writeln!(file, "{}={}", key, value)?;
         }
         EnvTarget::Shell(ref mut s) => {
             s.env.insert(key.to_string(), value.to_string());
@@ -64,6 +68,10 @@ fn save_env(target: EnvTarget) -> Result<()> {
             let mut cmd = Command::new(s.shell);
             for (key, value) in s.env.into_iter() {
                 cmd.env(key, value);
+            }
+
+            if let Some(args) = s.args {
+                cmd.args(args);
             }
 
             let mut child = cmd.spawn()?;
@@ -124,8 +132,7 @@ fn main() -> Result<()> {
     let password = if let Some(pwd) = args.password {
         pwd
     } else {
-        let pwd = rpassword::prompt_password("Password:")?;
-        pwd
+        rpassword::prompt_password("Password:")?
     };
 
     let key = DatabaseKey::new().with_password(password.as_str());
@@ -133,7 +140,7 @@ fn main() -> Result<()> {
     let db = Database::open(&mut db_file, key)?;
     info!("Database opened");
 
-    let Some(NodeRef::Group(ref root_group)) = db.root.iter().next() else {
+    let Some(NodeRef::Group(root_group)) = db.root.iter().next() else {
         info!("No root group found");
         return Ok(());
     };
@@ -144,11 +151,12 @@ fn main() -> Result<()> {
         EnvTarget::Shell(ShellTarget {
             shell: args.shell.unwrap(),
             env: HashMap::new(),
+            args: args.shell_args,
         })
     };
 
     let path = if let Some(root) = args.root {
-        root.split("/")
+        root.split('/')
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
     } else {

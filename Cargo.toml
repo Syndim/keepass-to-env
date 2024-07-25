@@ -1,6 +1,6 @@
 [package]
 name = "keepass-to-env"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Syndim <im@syndim.org>"]
 repository = "https://github.com/Syndim/keepass-to-env"
